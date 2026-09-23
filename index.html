@@ -85,7 +85,6 @@
       
       <!-- TAB 1: DASHBOARD -->
       <section id="tabContent-dashboard" class="space-y-6">
-        <!-- KPI Cards -->
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div class="glass-card p-5 rounded-2xl">
             <p class="text-xs text-slate-500 font-medium">Total Karyawan Diperiksa</p>
@@ -105,7 +104,6 @@
           </div>
         </div>
 
-        <!-- Chart Section -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div class="glass-card p-5 rounded-2xl">
             <h4 class="font-bold text-slate-800 text-sm mb-4">Top 5 Parameter Paling Banyak Abnormal</h4>
@@ -126,7 +124,7 @@
       <section id="tabContent-upload" class="hidden space-y-6">
         <div class="glass-card p-6 rounded-2xl">
           <h3 class="font-bold text-lg text-slate-800 mb-2">Upload Rekapan MCU (Matrix XLS / XLSX)</h3>
-          <p class="text-xs text-slate-500 mb-4">Pilih file Excel rekapan MCU dari tim HSE (seperti format Matrix 2025). Parser akan membaca otomatis nama karyawan dan jenis pemeriksaan.</p>
+          <p class="text-xs text-slate-500 mb-4">Pilih file Excel rekapan MCU dari tim HSE (seperti format Ringkasan 2025). Parser akan membaca otomatis nama karyawan, tanggal MCU, dan jenis pemeriksaan.</p>
 
           <div class="border-2 border-dashed border-slate-300 hover:border-sky-500 rounded-2xl p-8 text-center bg-slate-50/50 cursor-pointer transition" onclick="document.getElementById('excelFileInput').click()">
             <svg class="w-12 h-12 text-slate-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
@@ -135,7 +133,6 @@
             <input type="file" id="excelFileInput" accept=".xlsx, .xls" class="hidden" onchange="processExcelUpload(event)">
           </div>
 
-          <!-- Preview & Parsing Results -->
           <div id="parsePreviewSection" class="hidden mt-6 space-y-4">
             <div class="flex items-center justify-between">
               <h4 class="font-bold text-slate-800 text-sm">Pratinjau Hasil Analysis (<span id="parsedRecordCount">0</span> Item Termuat)</h4>
@@ -148,7 +145,9 @@
               <table class="w-full text-left text-xs text-slate-600">
                 <thead class="bg-slate-100 font-semibold text-slate-700 uppercase sticky top-0">
                   <tr>
+                    <th class="p-3">Tgl MCU</th>
                     <th class="p-3">Nama Karyawan</th>
+                    <th class="p-3">Kategori</th>
                     <th class="p-3">Nama Pemeriksaan</th>
                     <th class="p-3">Hasil</th>
                     <th class="p-3">Nilai Rujukan</th>
@@ -224,18 +223,13 @@
   </div>
 
   <script>
-    /**
-     * KONFIGURASI BACKEND GAS API URL
-     * Ganti string dibawah dengan Web App Exec URL yang Anda dapatkan saat Deploy GAS
-     */
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbx1dircEDrt9VIoYHe_QTxUUoGkZV2Dlud2YC1rb0ui7kuO4MGGnsLEhZziihpSymmF/exec";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxgF8qgnvj_g-LKoPuS0G9v9JxYxUCNNTMZpRBewRyL2NRmZEND2Am1yBJ8GE0iWOWW/exec";
 
     let currentUser = null;
     let masterRujukanList = [];
     let parsedMCUItems = [];
     let abnormalChartInstance = null;
 
-    // Auto-check Login state on Load
     window.addEventListener("DOMContentLoaded", () => {
       const savedUser = localStorage.getItem("mcu_user");
       if (savedUser) {
@@ -245,9 +239,6 @@
       registerServiceWorker();
     });
 
-    /**
-     * Authentication Handlers
-     */
     async function handleLogin(e) {
       e.preventDefault();
       const userVal = document.getElementById("loginUser").value;
@@ -301,9 +292,6 @@
       fetchMasterRujukan();
     }
 
-    /**
-     * Tab Navigation Switcher
-     */
     function switchTab(tabName) {
       ['dashboard', 'upload', 'rujukan', 'karyawan'].forEach(tab => {
         const content = document.getElementById(`tabContent-${tab}`);
@@ -320,9 +308,6 @@
       });
     }
 
-    /**
-     * Fetch & Render Dashboard Analytics
-     */
     async function loadDashboardData() {
       try {
         const res = await fetch(GAS_API_URL, {
@@ -391,7 +376,7 @@
     }
 
     /**
-     * Excel Matrix Parser Engine (SheetJS)
+     * EXCEL MATRIX PARSER ENGINE (PERBAIKAN UNTUK FORMAT FILE MCU PT MSA)
      */
     function processExcelUpload(e) {
       const file = e.target.files[0];
@@ -400,12 +385,11 @@
       const reader = new FileReader();
       reader.onload = function(evt) {
         const data = new Uint8Array(evt.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
+        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
         
-        // Grab sheet 0
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const jsonMatrix = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        const jsonMatrix = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false });
 
         parseMatrixToNormalizedData(jsonMatrix);
       };
@@ -413,20 +397,40 @@
     }
 
     function parseMatrixToNormalizedData(matrix) {
-      // Row 2 contains employee names starting from Col 4 (index 4)
-      const employeeNames = [];
-      if (matrix.length > 2) {
-        for (let col = 4; col < matrix[2].length; col++) {
-          const val = matrix[2][col];
-          if (val) employeeNames.push({ colIndex: col, name: String(val).trim() });
+      if (!matrix || matrix.length < 5) {
+        alert("Format Excel tidak valid atau data kosong.");
+        return;
+      }
+
+      // Baris Index 3 (Row 4 Excel): Nama Karyawan mulai Kolom E (index 4)
+      // Baris Index 4 (Row 5 Excel): Tanggal MCU per karyawan
+      const employeeColumns = [];
+      const rowNama = matrix[3] || [];
+      const rowTgl = matrix[4] || [];
+
+      for (let col = 4; col < rowNama.length; col++) {
+        const empName = rowNama[col] ? String(rowNama[col]).trim() : "";
+        if (empName) {
+          let tglStr = rowTgl[col] ? String(rowTgl[col]).trim() : new Date().toISOString().split("T")[0];
+          // Format tanggal jika dalam format mm/dd/yyyy dari SheetJS
+          if (tglStr.includes("/")) {
+            const parts = tglStr.split("/");
+            if (parts.length === 3) {
+              const yyyy = parts[2].length === 2 ? "20" + parts[2] : parts[2];
+              const mm = parts[0].padStart(2, '0');
+              const dd = parts[1].padStart(2, '0');
+              tglStr = `${yyyy}-${mm}-${dd}`;
+            }
+          }
+          employeeColumns.push({ colIndex: col, name: empName, date: tglStr });
         }
       }
 
       parsedMCUItems = [];
       let currentKategori = "UMUM";
 
-      // Test rows start from Row index 4
-      for (let r = 4; r < matrix.length; r++) {
+      // Test rows start from Row Index 5 (Row 6 Excel)
+      for (let r = 5; r < matrix.length; r++) {
         const row = matrix[r];
         if (!row || row.length === 0) continue;
 
@@ -435,27 +439,28 @@
         const rujukan = row[2] ? String(row[2]).trim() : "-";
         const satuan = row[3] ? String(row[3]).trim() : "-";
 
-        if (col0 && !col1) {
-          currentKategori = col0;
-          continue;
-        } else if (col0 && col1) {
+        // Update Kategori jika Col 0 terisi
+        if (col0 !== "") {
           currentKategori = col0;
         }
 
-        const namaTest = col1;
+        // Nama Test bisa ada di Col 1, atau Col 0 jika Col 1 kosong
+        const namaTest = col1 !== "" ? col1 : (col0 !== "" && col0 !== currentKategori ? col0 : "");
         if (!namaTest) continue;
 
-        // Iterate across employee columns
-        employeeNames.forEach(emp => {
+        // Buka hasil per karyawan
+        employeeColumns.forEach(emp => {
           const hasilRaw = row[emp.colIndex];
-          if (hasilRaw !== undefined && hasilRaw !== null && hasilRaw !== "") {
-            const statusEval = evaluateHealthValue(namaTest, hasilRaw, rujukan);
+          if (hasilRaw !== undefined && hasilRaw !== null && String(hasilRaw).trim() !== "") {
+            const valStr = String(hasilRaw).trim();
+            const statusEval = evaluateHealthValue(namaTest, valStr, rujukan);
+            
             parsedMCUItems.push({
-              tanggal_mcu: new Date().toISOString().split("T")[0],
+              tanggal_mcu: emp.date,
               nama_karyawan: emp.name,
               kategori_test: currentKategori,
               nama_test: namaTest,
-              hasil_nilai: hasilRaw,
+              hasil_nilai: valStr,
               nilai_rujukan: rujukan,
               satuan: satuan,
               status_evaluasi: statusEval
@@ -469,9 +474,11 @@
       const previewBody = document.getElementById("previewTableBody");
       previewBody.innerHTML = parsedMCUItems.slice(0, 50).map(item => `
         <tr>
+          <td class="p-3 font-mono text-[11px]">${item.tanggal_mcu}</td>
           <td class="p-3 font-medium text-slate-800">${item.nama_karyawan}</td>
-          <td class="p-3">${item.nama_test}</td>
-          <td class="p-3 font-semibold">${item.hasil_nilai}</td>
+          <td class="p-3 text-slate-500">${item.kategori_test}</td>
+          <td class="p-3 font-semibold">${item.nama_test}</td>
+          <td class="p-3 font-bold ${item.status_evaluasi === 'ABNORMAL' ? 'text-red-600' : 'text-slate-800'}">${item.hasil_nilai}</td>
           <td class="p-3 text-slate-500">${item.nilai_rujukan}</td>
           <td class="p-3 text-slate-500">${item.satuan}</td>
           <td class="p-3">
@@ -485,17 +492,31 @@
       document.getElementById("parsePreviewSection").classList.remove("hidden");
     }
 
+    /**
+     * EVALUATOR KESEHATAN UNTUK DATA NUMERIK & KUALITATIF (TEKS)
+     */
     function evaluateHealthValue(testName, value, rujukanTeks) {
-      const num = parseFloat(value);
-      if (isNaN(num)) return "NORMAL"; // Non-numeric qualitative values default
+      if (!value) return "NORMAL";
+      const valUpper = String(value).toUpperCase().trim();
 
-      // Match with master rujukan if available
-      const ref = masterRujukanList.find(m => m.namaTest.toLowerCase() === testName.toLowerCase());
+      // Check 1: Evaluasi Kualitatif (Teks)
+      if (valUpper.includes("(+)") || valUpper.includes("(+1)") || valUpper.includes("(+2)") || 
+          valUpper.includes("(+3)") || valUpper.includes("(+4)") || valUpper.includes("ABNORMAL") || 
+          valUpper.includes("TAKIKARDI") || valUpper.includes("RESTRIKSI") || valUpper.includes("ELEVATED")) {
+        return "ABNORMAL";
+      }
+
+      const num = parseFloat(value.replace(",", "."));
+      if (isNaN(num)) return "NORMAL";
+
+      // Check 2: Evaluasi berbasis Master Rujukan
+      const ref = masterRujukanList.find(m => m.namaTest.toLowerCase().trim() === testName.toLowerCase().trim());
       if (ref) {
         if (ref.tipe === "RANGE" && (num < ref.min || num > ref.max)) return "ABNORMAL";
         if (ref.tipe === "LESS_THAN" && num >= ref.max) return "ABNORMAL";
         if (ref.tipe === "GREATER_THAN" && num <= ref.min) return "ABNORMAL";
       }
+
       return "NORMAL";
     }
 
@@ -529,9 +550,6 @@
       }
     }
 
-    /**
-     * Master Rujukan Engine
-     */
     async function fetchMasterRujukan() {
       try {
         const res = await fetch(GAS_API_URL, {
@@ -559,9 +577,6 @@
       }
     }
 
-    /**
-     * Search Employee Medical History
-     */
     async function searchKaryawan() {
       const keyword = document.getElementById("searchKaryawanInput").value;
       const tbody = document.getElementById("searchTableBody");
@@ -579,7 +594,7 @@
         if (res.status === "success" && res.data.length > 0) {
           tbody.innerHTML = res.data.map(r => `
             <tr>
-              <td class="p-3">${r.tgl}</td>
+              <td class="p-3 font-mono text-[11px]">${r.tgl}</td>
               <td class="p-3 font-bold text-slate-800">${r.nama}</td>
               <td class="p-3">${r.test}</td>
               <td class="p-3 font-semibold">${r.hasil} ${r.satuan}</td>
@@ -599,9 +614,6 @@
       }
     }
 
-    /**
-     * PWA Service Worker Registration
-     */
     function registerServiceWorker() {
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('sw.js')
