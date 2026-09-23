@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analisis Hasil MCU - PT MSA</title>
+  
+  <!-- PWA Metadata -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0284c7">
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2966/2966327.png">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- SheetJS CDN (Parsing Excel Client-side) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <style>
+    .glass-card {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(229, 231, 235, 1);
+    }
+  </style>
+</head>
+<body class="bg-slate-100 font-sans text-slate-800 min-h-screen flex flex-col">
+
+  <!-- APP STATE: LOGIN -->
+  <div id="loginSection" class="flex-1 flex items-center justify-center p-4">
+    <div class="glass-card max-w-md w-full p-8 rounded-2xl shadow-xl">
+      <div class="text-center mb-6">
+        <div class="bg-sky-600 text-white w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        </div>
+        <h2 class="text-2xl font-bold text-slate-900">Analisis Hasil MCU</h2>
+        <p class="text-xs text-slate-500 mt-1">Sistem Pelaporan Kesehatan Karyawan PT MSA</p>
+      </div>
+
+      <form id="loginForm" onsubmit="handleLogin(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Username</label>
+          <input type="text" id="loginUser" required class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:outline-none text-sm" placeholder="hrdadmin">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Password</label>
+          <input type="password" id="loginPass" required class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:outline-none text-sm" placeholder="••••••••">
+        </div>
+        <button type="submit" id="loginBtn" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-medium py-2.5 rounded-xl transition duration-200 shadow-md">
+          Masuk ke Dashboard
+        </button>
+      </form>
+      <div id="loginAlert" class="mt-4 text-xs text-red-600 text-center hidden"></div>
+    </div>
+  </div>
+
+  <!-- APP STATE: MAIN DASHBOARD & SYSTEM UI -->
+  <div id="mainSection" class="hidden flex-1 flex flex-col">
+    <!-- Navbar Header -->
+    <header class="bg-sky-700 text-white shadow-md sticky top-0 z-30">
+      <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <span class="font-bold text-lg tracking-wide">MCU PT MSA</span>
+          <span id="userBadge" class="text-xs bg-sky-800 text-sky-200 px-2.5 py-1 rounded-full">HRD Admin</span>
+        </div>
+        <button onclick="handleLogout()" class="text-xs bg-sky-800 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg transition">
+          Keluar
+        </button>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="bg-white border-b border-slate-200">
+      <div class="max-w-7xl mx-auto px-4 flex gap-6 overflow-x-auto text-sm font-medium">
+        <button onclick="switchTab('dashboard')" id="tabNav-dashboard" class="py-3 border-b-2 border-sky-600 text-sky-600">Dashboard</button>
+        <button onclick="switchTab('upload')" id="tabNav-upload" class="py-3 border-b-2 border-transparent text-slate-500 hover:text-slate-800">Upload File MCU</button>
+        <button onclick="switchTab('rujukan')" id="tabNav-rujukan" class="py-3 border-b-2 border-transparent text-slate-500 hover:text-slate-800">Master Rujukan</button>
+        <button onclick="switchTab('karyawan')" id="tabNav-karyawan" class="py-3 border-b-2 border-transparent text-slate-500 hover:text-slate-800">Data Karyawan</button>
+      </div>
+    </nav>
+
+    <!-- Main Content Container -->
+    <main class="max-w-7xl mx-auto px-4 py-6 flex-1 w-full">
+      
+      <!-- TAB 1: DASHBOARD -->
+      <section id="tabContent-dashboard" class="space-y-6">
+        <!-- KPI Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="glass-card p-5 rounded-2xl">
+            <p class="text-xs text-slate-500 font-medium">Total Karyawan Diperiksa</p>
+            <h3 id="kpiTotalKaryawan" class="text-2xl font-bold text-slate-800 mt-1">0</h3>
+          </div>
+          <div class="glass-card p-5 rounded-2xl">
+            <p class="text-xs text-slate-500 font-medium">Total Parameter Diperiksa</p>
+            <h3 id="kpiTotalPemeriksaan" class="text-2xl font-bold text-slate-800 mt-1">0</h3>
+          </div>
+          <div class="glass-card p-5 rounded-2xl border-l-4 border-l-red-500">
+            <p class="text-xs text-slate-500 font-medium">Hasil Abnormal / Melebihi</p>
+            <h3 id="kpiTotalAbnormal" class="text-2xl font-bold text-red-600 mt-1">0</h3>
+          </div>
+          <div class="glass-card p-5 rounded-2xl border-l-4 border-l-emerald-500">
+            <p class="text-xs text-slate-500 font-medium">% Tingkat Kesehatan Fit</p>
+            <h3 id="kpiPctFit" class="text-2xl font-bold text-emerald-600 mt-1">100%</h3>
+          </div>
+        </div>
+
+        <!-- Chart Section -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="glass-card p-5 rounded-2xl">
+            <h4 class="font-bold text-slate-800 text-sm mb-4">Top 5 Parameter Paling Banyak Abnormal</h4>
+            <div class="h-64">
+              <canvas id="chartAbnormal"></canvas>
+            </div>
+          </div>
+          <div class="glass-card p-5 rounded-2xl">
+            <h4 class="font-bold text-slate-800 text-sm mb-4">Aktivitas MCU Terbaru</h4>
+            <div class="overflow-y-auto h-64 text-xs space-y-2" id="recentActivityList">
+              <p class="text-slate-400 italic">Memuat data...</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: UPLOAD FILE MCU (MATRIX PARSER) -->
+      <section id="tabContent-upload" class="hidden space-y-6">
+        <div class="glass-card p-6 rounded-2xl">
+          <h3 class="font-bold text-lg text-slate-800 mb-2">Upload Rekapan MCU (Matrix XLS / XLSX)</h3>
+          <p class="text-xs text-slate-500 mb-4">Pilih file Excel rekapan MCU dari tim HSE (seperti format Matrix 2025). Parser akan membaca otomatis nama karyawan dan jenis pemeriksaan.</p>
+
+          <div class="border-2 border-dashed border-slate-300 hover:border-sky-500 rounded-2xl p-8 text-center bg-slate-50/50 cursor-pointer transition" onclick="document.getElementById('excelFileInput').click()">
+            <svg class="w-12 h-12 text-slate-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+            <p class="text-sm font-medium text-slate-700">Klik di sini untuk mengunggah file XLS/XLSX</p>
+            <p class="text-xs text-slate-400 mt-1">Mendukung format matrix PT. MSA</p>
+            <input type="file" id="excelFileInput" accept=".xlsx, .xls" class="hidden" onchange="processExcelUpload(event)">
+          </div>
+
+          <!-- Preview & Parsing Results -->
+          <div id="parsePreviewSection" class="hidden mt-6 space-y-4">
+            <div class="flex items-center justify-between">
+              <h4 class="font-bold text-slate-800 text-sm">Pratinjau Hasil Analysis (<span id="parsedRecordCount">0</span> Item Termuat)</h4>
+              <button onclick="uploadParsedDataToGAS()" id="btnSubmitGAS" class="bg-sky-600 hover:bg-sky-700 text-white font-medium text-xs px-4 py-2 rounded-xl transition">
+                Simpan Data ke Cloud
+              </button>
+            </div>
+
+            <div class="overflow-x-auto max-h-80 border border-slate-200 rounded-xl">
+              <table class="w-full text-left text-xs text-slate-600">
+                <thead class="bg-slate-100 font-semibold text-slate-700 uppercase sticky top-0">
+                  <tr>
+                    <th class="p-3">Nama Karyawan</th>
+                    <th class="p-3">Nama Pemeriksaan</th>
+                    <th class="p-3">Hasil</th>
+                    <th class="p-3">Nilai Rujukan</th>
+                    <th class="p-3">Satuan</th>
+                    <th class="p-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="previewTableBody" class="divide-y divide-slate-200"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: MASTER RUJUKAN -->
+      <section id="tabContent-rujukan" class="hidden space-y-6">
+        <div class="glass-card p-6 rounded-2xl">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="font-bold text-lg text-slate-800">Master Nilai Rujukan Kesehatan</h3>
+              <p class="text-xs text-slate-500">Atur ambang batas nilai normal dan jenis evaluasi parameter MCU</p>
+            </div>
+            <button onclick="fetchMasterRujukan()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs px-3 py-1.5 rounded-lg">Refresh Data</button>
+          </div>
+
+          <div class="overflow-x-auto border border-slate-200 rounded-xl">
+            <table class="w-full text-left text-xs text-slate-600">
+              <thead class="bg-slate-100 font-semibold text-slate-700 uppercase">
+                <tr>
+                  <th class="p-3">Kategori</th>
+                  <th class="p-3">Nama Test</th>
+                  <th class="p-3">Rujukan Teks</th>
+                  <th class="p-3">Satuan</th>
+                  <th class="p-3">Min</th>
+                  <th class="p-3">Max</th>
+                  <th class="p-3">Tipe Evaluasi</th>
+                </tr>
+              </thead>
+              <tbody id="rujukanTableBody" class="divide-y divide-slate-200"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: RIWAYAT KARYAWAN -->
+      <section id="tabContent-karyawan" class="hidden space-y-6">
+        <div class="glass-card p-6 rounded-2xl">
+          <h3 class="font-bold text-lg text-slate-800 mb-2">Pencarian Riwayat MCU Karyawan</h3>
+          <div class="flex gap-2 mb-4">
+            <input type="text" id="searchKaryawanInput" class="flex-1 px-4 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500" placeholder="Ketik Nama Karyawan atau Parameter (contoh: Cholesterol)...">
+            <button onclick="searchKaryawan()" class="bg-sky-600 text-white px-4 py-2 rounded-xl text-xs font-medium hover:bg-sky-700">Cari</button>
+          </div>
+
+          <div class="overflow-x-auto border border-slate-200 rounded-xl">
+            <table class="w-full text-left text-xs text-slate-600">
+              <thead class="bg-slate-100 font-semibold text-slate-700 uppercase">
+                <tr>
+                  <th class="p-3">Tanggal</th>
+                  <th class="p-3">Nama Karyawan</th>
+                  <th class="p-3">Pemeriksaan</th>
+                  <th class="p-3">Hasil</th>
+                  <th class="p-3">Rujukan</th>
+                  <th class="p-3">Status</th>
+                </tr>
+              </thead>
+              <tbody id="searchTableBody" class="divide-y divide-slate-200"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    /**
+     * KONFIGURASI BACKEND GAS API URL
+     * Ganti string dibawah dengan Web App Exec URL yang Anda dapatkan saat Deploy GAS
+     */
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxgF8qgnvj_g-LKoPuS0G9v9JxYxUCNNTMZpRBewRyL2NRmZEND2Am1yBJ8GE0iWOWW/exec";
+
+    let currentUser = null;
+    let masterRujukanList = [];
+    let parsedMCUItems = [];
+    let abnormalChartInstance = null;
+
+    // Auto-check Login state on Load
+    window.addEventListener("DOMContentLoaded", () => {
+      const savedUser = localStorage.getItem("mcu_user");
+      if (savedUser) {
+        currentUser = JSON.parse(savedUser);
+        showMainSection();
+      }
+      registerServiceWorker();
+    });
+
+    /**
+     * Authentication Handlers
+     */
+    async function handleLogin(e) {
+      e.preventDefault();
+      const userVal = document.getElementById("loginUser").value;
+      const passVal = document.getElementById("loginPass").value;
+      const btn = document.getElementById("loginBtn");
+      const alertDiv = document.getElementById("loginAlert");
+
+      btn.disabled = true;
+      btn.innerText = "Verifikasi...";
+      alertDiv.classList.add("hidden");
+
+      try {
+        const response = await fetch(GAS_API_URL, {
+          method: "POST",
+          body: JSON.stringify({
+            action: "login",
+            payload: { username: userVal, password: passVal }
+          })
+        });
+        const res = await response.json();
+
+        if (res.status === "success") {
+          currentUser = res.user;
+          localStorage.setItem("mcu_user", JSON.stringify(currentUser));
+          showMainSection();
+        } else {
+          alertDiv.innerText = res.message;
+          alertDiv.classList.remove("hidden");
+        }
+      } catch (err) {
+        alertDiv.innerText = "Gagal terhubung ke server Backend API GAS.";
+        alertDiv.classList.remove("hidden");
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "Masuk ke Dashboard";
+      }
+    }
+
+    function handleLogout() {
+      localStorage.removeItem("mcu_user");
+      currentUser = null;
+      document.getElementById("mainSection").classList.add("hidden");
+      document.getElementById("loginSection").classList.remove("hidden");
+    }
+
+    function showMainSection() {
+      document.getElementById("loginSection").classList.add("hidden");
+      document.getElementById("mainSection").classList.remove("hidden");
+      document.getElementById("userBadge").innerText = `${currentUser.nama} (${currentUser.role})`;
+      loadDashboardData();
+      fetchMasterRujukan();
+    }
+
+    /**
+     * Tab Navigation Switcher
+     */
+    function switchTab(tabName) {
+      ['dashboard', 'upload', 'rujukan', 'karyawan'].forEach(tab => {
+        const content = document.getElementById(`tabContent-${tab}`);
+        const nav = document.getElementById(`tabNav-${tab}`);
+        if (tab === tabName) {
+          content.classList.remove("hidden");
+          nav.classList.add("border-sky-600", "text-sky-600");
+          nav.classList.remove("border-transparent", "text-slate-500");
+        } else {
+          content.classList.add("hidden");
+          nav.classList.remove("border-sky-600", "text-sky-600");
+          nav.classList.add("border-transparent", "text-slate-500");
+        }
+      });
+    }
+
+    /**
+     * Fetch & Render Dashboard Analytics
+     */
+    async function loadDashboardData() {
+      try {
+        const res = await fetch(GAS_API_URL, {
+          method: "POST",
+          body: JSON.stringify({ action: "getDashboardData" })
+        }).then(r => r.json());
+
+        if (res.status === "success") {
+          document.getElementById("kpiTotalKaryawan").innerText = res.summary.totalKaryawan;
+          document.getElementById("kpiTotalPemeriksaan").innerText = res.summary.totalPemeriksaan;
+          document.getElementById("kpiTotalAbnormal").innerText = res.summary.totalAbnormal;
+          document.getElementById("kpiPctFit").innerText = `${res.summary.pctFit}%`;
+
+          renderAbnormalChart(res.topAbnormal);
+          renderRecentActivity(res.recentRecords);
+        }
+      } catch (err) {
+        console.error("Dashboard error:", err);
+      }
+    }
+
+    function renderAbnormalChart(dataList) {
+      const ctx = document.getElementById('chartAbnormal').getContext('2d');
+      if (abnormalChartInstance) abnormalChartInstance.destroy();
+
+      const labels = dataList.map(d => d.parameter);
+      const values = dataList.map(d => d.count);
+
+      abnormalChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Jumlah Temuan Abnormal',
+            data: values,
+            backgroundColor: '#ef4444',
+            borderRadius: 8
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } }
+        }
+      });
+    }
+
+    function renderRecentActivity(records) {
+      const container = document.getElementById("recentActivityList");
+      if (!records || records.length === 0) {
+        container.innerHTML = `<p class="text-slate-400 italic">Belum ada aktivitas data MCU.</p>`;
+        return;
+      }
+
+      container.innerHTML = records.map(r => `
+        <div class="p-2.5 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+          <div>
+            <p class="font-semibold text-slate-800">${r.nama}</p>
+            <p class="text-slate-500">${r.test}: <span class="font-medium">${r.hasil} ${r.satuan}</span></p>
+          </div>
+          <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${r.statusEval === 'ABNORMAL' ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}">
+            ${r.statusEval}
+          </span>
+        </div>
+      `).join("");
+    }
+
+    /**
+     * Excel Matrix Parser Engine (SheetJS)
+     */
+    function processExcelUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const data = new Uint8Array(evt.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        
+        // Grab sheet 0
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonMatrix = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+        parseMatrixToNormalizedData(jsonMatrix);
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function parseMatrixToNormalizedData(matrix) {
+      // Row 2 contains employee names starting from Col 4 (index 4)
+      const employeeNames = [];
+      if (matrix.length > 2) {
+        for (let col = 4; col < matrix[2].length; col++) {
+          const val = matrix[2][col];
+          if (val) employeeNames.push({ colIndex: col, name: String(val).trim() });
+        }
+      }
+
+      parsedMCUItems = [];
+      let currentKategori = "UMUM";
+
+      // Test rows start from Row index 4
+      for (let r = 4; r < matrix.length; r++) {
+        const row = matrix[r];
+        if (!row || row.length === 0) continue;
+
+        const col0 = row[0] ? String(row[0]).trim() : "";
+        const col1 = row[1] ? String(row[1]).trim() : "";
+        const rujukan = row[2] ? String(row[2]).trim() : "-";
+        const satuan = row[3] ? String(row[3]).trim() : "-";
+
+        if (col0 && !col1) {
+          currentKategori = col0;
+          continue;
+        } else if (col0 && col1) {
+          currentKategori = col0;
+        }
+
+        const namaTest = col1;
+        if (!namaTest) continue;
+
+        // Iterate across employee columns
+        employeeNames.forEach(emp => {
+          const hasilRaw = row[emp.colIndex];
+          if (hasilRaw !== undefined && hasilRaw !== null && hasilRaw !== "") {
+            const statusEval = evaluateHealthValue(namaTest, hasilRaw, rujukan);
+            parsedMCUItems.push({
+              tanggal_mcu: new Date().toISOString().split("T")[0],
+              nama_karyawan: emp.name,
+              kategori_test: currentKategori,
+              nama_test: namaTest,
+              hasil_nilai: hasilRaw,
+              nilai_rujukan: rujukan,
+              satuan: satuan,
+              status_evaluasi: statusEval
+            });
+          }
+        });
+      }
+
+      // Render Preview
+      document.getElementById("parsedRecordCount").innerText = parsedMCUItems.length;
+      const previewBody = document.getElementById("previewTableBody");
+      previewBody.innerHTML = parsedMCUItems.slice(0, 50).map(item => `
+        <tr>
+          <td class="p-3 font-medium text-slate-800">${item.nama_karyawan}</td>
+          <td class="p-3">${item.nama_test}</td>
+          <td class="p-3 font-semibold">${item.hasil_nilai}</td>
+          <td class="p-3 text-slate-500">${item.nilai_rujukan}</td>
+          <td class="p-3 text-slate-500">${item.satuan}</td>
+          <td class="p-3">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${item.status_evaluasi === 'ABNORMAL' ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}">
+              ${item.status_evaluasi}
+            </span>
+          </td>
+        </tr>
+      `).join("");
+
+      document.getElementById("parsePreviewSection").classList.remove("hidden");
+    }
+
+    function evaluateHealthValue(testName, value, rujukanTeks) {
+      const num = parseFloat(value);
+      if (isNaN(num)) return "NORMAL"; // Non-numeric qualitative values default
+
+      // Match with master rujukan if available
+      const ref = masterRujukanList.find(m => m.namaTest.toLowerCase() === testName.toLowerCase());
+      if (ref) {
+        if (ref.tipe === "RANGE" && (num < ref.min || num > ref.max)) return "ABNORMAL";
+        if (ref.tipe === "LESS_THAN" && num >= ref.max) return "ABNORMAL";
+        if (ref.tipe === "GREATER_THAN" && num <= ref.min) return "ABNORMAL";
+      }
+      return "NORMAL";
+    }
+
+    async function uploadParsedDataToGAS() {
+      const btn = document.getElementById("btnSubmitGAS");
+      btn.disabled = true;
+      btn.innerText = "Mengirim...";
+
+      try {
+        const res = await fetch(GAS_API_URL, {
+          method: "POST",
+          body: JSON.stringify({
+            action: "saveBatchMCU",
+            payload: { items: parsedMCUItems }
+          })
+        }).then(r => r.json());
+
+        if (res.status === "success") {
+          alert(res.message);
+          document.getElementById("parsePreviewSection").classList.add("hidden");
+          switchTab("dashboard");
+          loadDashboardData();
+        } else {
+          alert("Gagal: " + res.message);
+        }
+      } catch (err) {
+        alert("Terjadi kesalahan koneksi saat menyimpan data.");
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "Simpan Data ke Cloud";
+      }
+    }
+
+    /**
+     * Master Rujukan Engine
+     */
+    async function fetchMasterRujukan() {
+      try {
+        const res = await fetch(GAS_API_URL, {
+          method: "POST",
+          body: JSON.stringify({ action: "getMasterRujukan" })
+        }).then(r => r.json());
+
+        if (res.status === "success") {
+          masterRujukanList = res.data;
+          const tbody = document.getElementById("rujukanTableBody");
+          tbody.innerHTML = masterRujukanList.map(r => `
+            <tr>
+              <td class="p-3 font-medium">${r.kategori}</td>
+              <td class="p-3 font-semibold text-slate-800">${r.namaTest}</td>
+              <td class="p-3">${r.rujukan}</td>
+              <td class="p-3 text-slate-500">${r.satuan}</td>
+              <td class="p-3">${r.min}</td>
+              <td class="p-3">${r.max}</td>
+              <td class="p-3"><span class="bg-slate-100 px-2 py-0.5 rounded text-[10px] font-mono">${r.tipe}</span></td>
+            </tr>
+          `).join("");
+        }
+      } catch (err) {
+        console.error("Error loading master rujukan:", err);
+      }
+    }
+
+    /**
+     * Search Employee Medical History
+     */
+    async function searchKaryawan() {
+      const keyword = document.getElementById("searchKaryawanInput").value;
+      const tbody = document.getElementById("searchTableBody");
+      tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-400">Mencari...</td></tr>`;
+
+      try {
+        const res = await fetch(GAS_API_URL, {
+          method: "POST",
+          body: JSON.stringify({
+            action: "getEmployeeHistory",
+            payload: { keyword }
+          })
+        }).then(r => r.json());
+
+        if (res.status === "success" && res.data.length > 0) {
+          tbody.innerHTML = res.data.map(r => `
+            <tr>
+              <td class="p-3">${r.tgl}</td>
+              <td class="p-3 font-bold text-slate-800">${r.nama}</td>
+              <td class="p-3">${r.test}</td>
+              <td class="p-3 font-semibold">${r.hasil} ${r.satuan}</td>
+              <td class="p-3 text-slate-500">${r.rujukan}</td>
+              <td class="p-3">
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${r.statusEval === 'ABNORMAL' ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}">
+                  ${r.statusEval}
+                </span>
+              </td>
+            </tr>
+          `).join("");
+        } else {
+          tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-400">Data tidak ditemukan.</td></tr>`;
+        }
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-red-500">Error memuat data.</td></tr>`;
+      }
+    }
+
+    /**
+     * PWA Service Worker Registration
+     */
+    function registerServiceWorker() {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js')
+          .then(() => console.log('PWA Service Worker Registered successfully.'))
+          .catch(err => console.log('SW registration failed:', err));
+      }
+    }
+  </script>
+</body>
+</html>
